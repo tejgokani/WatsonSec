@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ WatsonSec
+#  WatsonSec
 
 **Real-time AI-powered security scanning, living inside your VS Code session.**
 
