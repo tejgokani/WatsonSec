@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { FindingsStore } from "./store";
 import { Orchestrator } from "./orchestrator";
+import { ToolManager } from "./toolManager";
 import { DashboardServer } from "./dashboard/server";
 import { StatusBar } from "./statusBar";
 import { DiagnosticsManager } from "./diagnostics/manager";
@@ -26,7 +27,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const slowScanInterval = config.get<number>("slowScanSaveInterval") ?? 15;
 
   const store = new FindingsStore(context.globalStorageUri.fsPath);
-  const orchestrator = new Orchestrator(store);
+  const tools = new ToolManager(context);
+  const orchestrator = new Orchestrator(store, tools);
   const dashboard = new DashboardServer(store, port);
   const statusBar = new StatusBar();
   const diagnostics = new DiagnosticsManager();

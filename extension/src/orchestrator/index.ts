@@ -1,4 +1,3 @@
-import * as vscode from "vscode";
 import * as crypto from "crypto";
 import type { AdapterResult, Finding, ScanRecord } from "../types";
 import type { ScannerAdapter } from "./adapters/base";
@@ -15,6 +14,7 @@ import { CodeQLAdapter } from "./adapters/codeql";
 import { fingerprint } from "./fingerprint";
 import { aggregate } from "../aggregator";
 import { FindingsStore } from "../store";
+import { ToolManager } from "../toolManager";
 
 // Fast adapters run on every (debounced) save.
 const FAST_ADAPTERS: ScannerAdapter[] = [
@@ -36,24 +36,6 @@ const SLOW_ADAPTERS: ScannerAdapter[] = [
 
 const ALL_ADAPTERS = [...FAST_ADAPTERS, ...SLOW_ADAPTERS];
 
-function getBinaryPath(adapter: ScannerAdapter): string {
-  const config = vscode.workspace.getConfiguration("watsonsec");
-  // Mapping: adapter.name → config key
-  const KEY_MAP: Record<string, string> = {
-    semgrep: "semgrepPath",
-    gitleaks: "gitleaksPath",
-    "osv-scanner": "osvScannerPath",
-    trivy: "trivyPath",
-    checkov: "checkovPath",
-    bandit: "banditPath",
-    gosec: "gosecPath",
-    grype: "grypeePath",
-    trufflehog: "trufflehogPath",
-    codeql: "codeqlPath",
-  };
-  const key = KEY_MAP[adapter.name] ?? `${adapter.name}Path`;
-  return config.get<string>(key) ?? adapter.name;
-}
 
 export interface ScanResult {
   findings: Finding[];
@@ -62,17 +44,17 @@ export interface ScanResult {
 
 export class Orchestrator {
   private readonly store: FindingsStore;
+  private readonly tools: ToolManager;
 
-  constructor(store: FindingsStore) {
+  constructor(store: FindingsStore, tools: ToolManager) {
     this.store = store;
+    this.tools = tools;
   }
 
-  // Fast scan: runs all fast adapters in parallel (triggered on save).
   async runFastScan(workspaceRoot: string): Promise<ScanResult> {
     return this.runAdapters(workspaceRoot, FAST_ADAPTERS, "fast");
   }
 
-  // Full scan: fast + slow adapters (triggered by command or N-save counter).
   async runFullScan(workspaceRoot: string): Promise<ScanResult> {
     return this.runAdapters(workspaceRoot, ALL_ADAPTERS, "full");
   }
@@ -89,8 +71,11 @@ export class Orchestrator {
     const selected = adapters.filter((a) => a.shouldRun(fp));
     const skipped = ALL_ADAPTERS.filter((a) => !selected.includes(a));
 
+    // Ensure all needed tools are present — download missing ones (with prompts for large tools).
+    await this.tools.ensureTools(selected.map((a) => a.name), fp);
+
     const results: AdapterResult[] = await Promise.all(
-      selected.map((adapter) => adapter.run(workspaceRoot, getBinaryPath(adapter)))
+      selected.map((adapter) => adapter.run(workspaceRoot, this.tools.resolveToolPath(adapter.name)))
     );
 
     const errorsByTool: Record<string, string> = {};
