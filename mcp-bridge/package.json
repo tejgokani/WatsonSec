@@ -1,0 +1,23 @@
+{
+  "name": "watsonsec-mcp-bridge",
+  "version": "0.3.0",
+  "description": "MCP server exposing WatsonSec findings to coding agents (read-only).",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "esbuild src/server.ts --bundle --outfile=dist/server.js --format=cjs --platform=node --minify",
+    "watch": "npm run build -- --watch",
+    "start": "node dist/server.js"
+  },
+  "bin": {
+    "watsonsec-mcp": "dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "esbuild": "^0.21.5",
+    "typescript": "^5.9.3"
+  },
+  "license": "MIT"
+}

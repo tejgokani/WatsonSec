@@ -1,8 +1,10 @@
-# Extension build output and dependencies
+# Build output and dependencies
 extension/out/
 extension/dist/
 extension/node_modules/
 extension/*.vsix
+mcp-bridge/dist/
+mcp-bridge/node_modules/
 
 # macOS
 .DS_Store
