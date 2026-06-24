@@ -1,7 +1,0 @@
-src/**
-node_modules/**
-*.md
-!README.md
-tsconfig.json
-.vscodeignore
-out/**/*.js.map
