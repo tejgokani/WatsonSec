@@ -5,10 +5,13 @@ import { FindingsStore } from "./store";
 import { Orchestrator } from "./orchestrator";
 import { DashboardServer } from "./dashboard/server";
 import { StatusBar } from "./statusBar";
+import { DiagnosticsManager } from "./diagnostics/manager";
 import { exportMarkdown } from "./reports/exporter";
+import { notifyIfUpdatesAvailable } from "./updater";
+import type { Finding } from "./types";
 
-// Debounce timer for save-triggered scans.
 let scanDebounce: ReturnType<typeof setTimeout> | null = null;
+let saveSinceLastSlowScan = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -17,19 +20,24 @@ export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration("watsonsec");
   const port = config.get<number>("dashboardPort") ?? 7891;
   const debounceMs = config.get<number>("debounceMs") ?? 2000;
+  const slowScanInterval = config.get<number>("slowScanSaveInterval") ?? 15;
 
-  // Persistent store in extension's global storage directory.
   const store = new FindingsStore(context.globalStorageUri.fsPath);
   const orchestrator = new Orchestrator(store);
   const dashboard = new DashboardServer(store, port);
   const statusBar = new StatusBar();
+  const diagnostics = new DiagnosticsManager();
 
-  dashboard.start();
+  dashboard.start(workspaceRoot);
 
-  // ─── Commands ─────────────────────────────────────────────────────────────
+  // ─── Commands ──────────────────────────────────────────────────────────────
 
-  const runScanCmd = vscode.commands.registerCommand("watsonsec.runScan", async () => {
-    await runScan(workspaceRoot, orchestrator, statusBar, store);
+  const runFastScanCmd = vscode.commands.registerCommand("watsonsec.runScan", async () => {
+    await executeScan(workspaceRoot, orchestrator, statusBar, diagnostics, store, "fast");
+  });
+
+  const runFullScanCmd = vscode.commands.registerCommand("watsonsec.runFullScan", async () => {
+    await executeScan(workspaceRoot, orchestrator, statusBar, diagnostics, store, "full");
   });
 
   const openDashboardCmd = vscode.commands.registerCommand("watsonsec.openDashboard", () => {
@@ -45,46 +53,74 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.showInformationMessage("WatsonSec: Report saved to watsonsec-report.md");
   });
 
-  // ─── File watcher ─────────────────────────────────────────────────────────
+  // ─── File watcher ──────────────────────────────────────────────────────────
 
   const watcher = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(workspaceRoot, "**/*"),
-    false, // onCreate
-    false, // onChange (save)
-    true   // ignore delete
+    false, false, true
   );
 
-  const triggerDebouncedScan = () => {
+  const triggerScan = () => {
+    saveSinceLastSlowScan++;
+    const shouldRunSlow = saveSinceLastSlowScan >= slowScanInterval;
+    if (shouldRunSlow) saveSinceLastSlowScan = 0;
+
     if (scanDebounce) clearTimeout(scanDebounce);
     scanDebounce = setTimeout(() => {
-      runScan(workspaceRoot, orchestrator, statusBar, store);
+      executeScan(
+        workspaceRoot,
+        orchestrator,
+        statusBar,
+        diagnostics,
+        store,
+        shouldRunSlow ? "full" : "fast"
+      );
     }, debounceMs);
   };
 
-  watcher.onDidChange(triggerDebouncedScan);
-  watcher.onDidCreate(triggerDebouncedScan);
+  watcher.onDidChange(triggerScan);
+  watcher.onDidCreate(triggerScan);
 
-  context.subscriptions.push(runScanCmd, openDashboardCmd, exportReportCmd, statusBar, watcher);
+  context.subscriptions.push(
+    runFastScanCmd,
+    runFullScanCmd,
+    openDashboardCmd,
+    exportReportCmd,
+    statusBar,
+    diagnostics,
+    watcher
+  );
 
-  // Run an initial scan on activation.
-  runScan(workspaceRoot, orchestrator, statusBar, store);
+  // Initial fast scan on activation.
+  executeScan(workspaceRoot, orchestrator, statusBar, diagnostics, store, "fast");
+
+  // Check for scanner updates once, without blocking activation.
+  notifyIfUpdatesAvailable().catch(() => { /* network failures are silent */ });
 }
 
-async function runScan(
+async function executeScan(
   workspaceRoot: string,
   orchestrator: Orchestrator,
   statusBar: StatusBar,
-  store: FindingsStore
+  diagnostics: DiagnosticsManager,
+  store: FindingsStore,
+  mode: "fast" | "full"
 ): Promise<void> {
   statusBar.setScanning();
   try {
-    const result = await orchestrator.runScan(workspaceRoot);
-    statusBar.setResults(result.findings);
+    const result = mode === "full"
+      ? await orchestrator.runFullScan(workspaceRoot)
+      : await orchestrator.runFastScan(workspaceRoot);
+
+    const active = result.findings.filter((f: Finding) => f.status !== "resolved");
+    statusBar.setResults(active);
+    diagnostics.update(result.findings, workspaceRoot);
 
     const errorTools = Object.keys(result.scan.errorsByTool);
     if (errorTools.length) {
-      const msg = `WatsonSec: ${errorTools.join(", ")} failed — check tool installation`;
-      vscode.window.showWarningMessage(msg);
+      vscode.window.showWarningMessage(
+        `WatsonSec: ${errorTools.join(", ")} could not run — check binary paths in settings`
+      );
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

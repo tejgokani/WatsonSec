@@ -1,8 +1,8 @@
 {
   "name": "watsonsec",
   "displayName": "WatsonSec",
-  "description": "Local-first security engine: runs real scanners (Semgrep, Gitleaks, OSV-Scanner) on every save, deduplicates findings, and surfaces them in a dashboard and MCP bridge.",
-  "version": "0.2.0",
+  "description": "Local-first security engine: runs real scanners (Semgrep, Gitleaks, Trivy, Checkov, Bandit, gosec, Grype, TruffleHog, CodeQL) on every save, deduplicates findings, and surfaces them in a dashboard and MCP bridge.",
+  "version": "0.3.0",
   "publisher": "tejgokani",
   "icon": "assets/icon.png",
   "engines": {
@@ -31,7 +31,11 @@
     "commands": [
       {
         "command": "watsonsec.runScan",
-        "title": "WatsonSec: Run Full Scan"
+        "title": "WatsonSec: Run Fast Scan"
+      },
+      {
+        "command": "watsonsec.runFullScan",
+        "title": "WatsonSec: Run Full Scan (includes CodeQL)"
       },
       {
         "command": "watsonsec.openDashboard",
@@ -60,6 +64,41 @@
           "default": "osv-scanner",
           "description": "Path to the osv-scanner binary."
         },
+        "watsonsec.trivyPath": {
+          "type": "string",
+          "default": "trivy",
+          "description": "Path to the trivy binary."
+        },
+        "watsonsec.checkovPath": {
+          "type": "string",
+          "default": "checkov",
+          "description": "Path to the checkov binary."
+        },
+        "watsonsec.banditPath": {
+          "type": "string",
+          "default": "bandit",
+          "description": "Path to the bandit binary."
+        },
+        "watsonsec.gosecPath": {
+          "type": "string",
+          "default": "gosec",
+          "description": "Path to the gosec binary."
+        },
+        "watsonsec.grypeePath": {
+          "type": "string",
+          "default": "grype",
+          "description": "Path to the grype binary."
+        },
+        "watsonsec.trufflehogPath": {
+          "type": "string",
+          "default": "trufflehog",
+          "description": "Path to the trufflehog binary (AGPL-3.0)."
+        },
+        "watsonsec.codeqlPath": {
+          "type": "string",
+          "default": "codeql",
+          "description": "Path to the codeql binary. Only used during full scans."
+        },
         "watsonsec.dashboardPort": {
           "type": "number",
           "default": 7891,
@@ -69,6 +108,11 @@
           "type": "number",
           "default": 2000,
           "description": "Milliseconds to wait after a save before triggering a scan."
+        },
+        "watsonsec.slowScanSaveInterval": {
+          "type": "number",
+          "default": 15,
+          "description": "Number of fast scans between full scans (which include CodeQL). Set to 0 to disable automatic full scans."
         }
       }
     }
