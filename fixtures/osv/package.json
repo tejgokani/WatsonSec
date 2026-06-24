@@ -1,0 +1,10 @@
+{
+  "name": "watsonsec-osv-fixture",
+  "version": "0.0.1",
+  "description": "Fixture for OSV-Scanner adapter testing — intentionally pinned to vulnerable versions.",
+  "dependencies": {
+    "lodash": "4.17.15",
+    "axios": "0.21.1",
+    "express": "4.17.1"
+  }
+}
